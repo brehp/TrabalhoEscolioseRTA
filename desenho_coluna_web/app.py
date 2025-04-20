@@ -1,8 +1,11 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, session, url_for
 from psycopg2 import connect, sql
 import psycopg2.extras
+import base64
 
 app = Flask(__name__)
+app.secret_key = 'chave_super_secreta'  # Necessário para usar sessão
+
 
 # Configuração do banco de dados
 DATABASE_URL = "postgresql://pacientes_web_user:uKk2h90mdG3FVesUsIBf2AuZqCbmfwnZ@dpg-cvu4v9h5pdvs73e4qec0-a.oregon-postgres.render.com/pacientes_web"
@@ -25,25 +28,27 @@ def get_db_connection():
 def index():
     return render_template('login.html')
 
-# Rota para realizar o login e ser redirecionado a pagina de paciente ainda não feita 
+# Rota para realizar o login e ser redirecionado ao dashboard 
 @app.route('/login', methods=['POST'])
 def login():
     cpf = request.form['cpf']
-    senha = request.form['senha']
+    senha = request.form['senha']   
 
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-    query = sql.SQL("SELECT * FROM pacientes WHERE cpf = %s AND senha = %s")
-    cursor.execute(query, (cpf, senha))
+    cursor.execute(sql.SQL("SELECT * FROM pacientes WHERE cpf = %s AND senha = %s"), (cpf, senha))
     user = cursor.fetchone()
 
     conn.close()
  
     if user:
-        return render_template('dashboard.html')  # Página de sucesso após login
+        session['nome'] = user['nome']
+        session['paciente_id'] = user['id']  # Armazena para a próxima rota
+        return redirect(url_for('dashboard'))
+   
     else:
-        return "CPF ou senha inválidos", 401
+        return "CPF ou senha inválidos"
 
 # Redireciona de login para a pagina cadastro
 @app.route('/redireciona_Login_Cadastro')
@@ -55,7 +60,7 @@ def redirecionar_LoginCadastro():
 def redirecionar_CadastroLogin():
     return render_template('login.html')
 
-# Cadastro de paciente e redirecionamento a pagina de paciente ainda não feita 
+# Cadastro de paciente e redirecionamento ao login 
 @app.route('/cadastro', methods=['POST'])
 def cadastro():
     nome = request.form['nome']
@@ -86,7 +91,37 @@ def cadastro():
 
     return redirect(url_for('index'))  # Redireciona para a página de login após cadastro
 
-#Pagina de teste 
+
+
+
+#Pagina de Dashboard###################################################################
+
+
+
+
+# Codigo do dashboard onde mostra as imagens do paciente 
+@app.route('/dashboard')
+def dashboard():
+    nome = session.get('nome')
+    paciente_id = session.get('paciente_id')
+
+    if not nome or not paciente_id:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    # Busca todas as imagens relacionadas ao paciente
+    cursor.execute("SELECT imagem FROM imagens WHERE paciente_id = %s", (paciente_id,))
+    imagens_raw = cursor.fetchall()
+    conn.close()
+
+    # Converte as imagens bytea para base64
+    imagens_base64 = [
+        base64.b64encode(img['imagem']).decode('utf-8') for img in imagens_raw
+    ]
+
+    return render_template('dashboard.html', nome=nome, imagens=imagens_base64)
 
 
 
@@ -94,15 +129,6 @@ def cadastro():
 
 
 
-
-
-
-
-
-
-
-
-# Página de sucesso após o login (exemplo de dashboard)
 
 
 if __name__ == '__main__':
