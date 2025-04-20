@@ -7,13 +7,16 @@ import threading
 from datetime import datetime
 import base64
 
+#Cria o site no flask
 app = Flask(__name__)
 
 DATABASE_URL = "postgresql://pacientes_web_user:uKk2h90mdG3FVesUsIBf2AuZqCbmfwnZ@dpg-cvu4v9h5pdvs73e4qec0-a.oregon-postgres.render.com/pacientes_web"
 
+# Retorna uma conexão com o banco de dados usando dicionário como retorno
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
+# Busca as imagens desse paciente, transforma em base64 para exibir no site
 def get_imagens_paciente(paciente_id):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -32,6 +35,7 @@ def get_imagens_paciente(paciente_id):
     conn.close()
     return imagens
 
+# Busca o nome do paciente e todas as imagens no banco.
 @app.route("/dashboard/<int:paciente_id>")
 def dashboard(paciente_id):
     conn = get_db_connection()
@@ -48,20 +52,27 @@ def dashboard(paciente_id):
 
 @app.route("/desenhar/<int:paciente_id>")
 def desenhar_mao(paciente_id):
+    # Importa um script chamado desenhar_mao.py.
     import desenhar_mao
-    desenhar_mao.run(paciente_id)
+    # Chama a função run(paciente_id) desse script para iniciar a interface de desenho.
+    desenhar_mao(paciente_id)
+    # Após terminar, redireciona para o dashboard.
     return redirect(url_for('dashboard', paciente_id=paciente_id))
 
+# Pagina inicial
 @app.route('/')
 def index():
     return render_template('index.html')
 
 @app.route('/paciente')
 def entrar_com_cpf():
+    # Pega o CPF digitado.
     cpf = request.args.get('cpf')
+    senha = request.args.get('senha')
+
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("SELECT id FROM pacientes WHERE cpf = %s", (cpf,))
+    c.execute("SELECT id FROM pacientes WHERE cpf = %s AND senha = %s", (cpf, senha,))
     result = c.fetchone()
     conn.close()
 
@@ -69,18 +80,20 @@ def entrar_com_cpf():
         paciente_id = result['id']
         return redirect(url_for('dashboard', paciente_id=paciente_id))
     else:
-        return "Paciente não encontrado. Verifique o CPF ou cadastre-se.", 404
+        return "Paciente não encontrado. Verifique o CPF ou cadastre-se."
 
+#Insere o cadastro do paciente
 @app.route('/cadastro', methods=['POST'])
 def cadastro():
     nome = request.form['nome']
     data_nascimento = request.form['data_nascimento']
     cpf = request.form['cpf']
+    senha = request.form['senha']
 
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO pacientes (nome, data_nascimento, cpf) VALUES (%s, %s, %s)",
-              (nome, data_nascimento, cpf))
+    c.execute("INSERT INTO pacientes (nome, data_nascimento, cpf, senha) VALUES (%s, %s, %s, %s)",
+              (nome, data_nascimento, cpf, senha))
     conn.commit()
     c.execute("SELECT LASTVAL()")
     paciente_id = c.fetchone()['lastval']
@@ -88,26 +101,28 @@ def cadastro():
 
     return redirect(url_for('dashboard', paciente_id=paciente_id))
 
+#Recebe imagem do formulario e salva no banco
 @app.route('/upload/<int:paciente_id>', methods=['POST'])
 def upload(paciente_id):
-    image = request.files['imagem']
-    if image:
-        image_bytes = image.read()
-        conn = get_db_connection()
-        c = conn.cursor()
-        c.execute("INSERT INTO imagens (paciente_id, imagem, data) VALUES (%s, %s, %s)",
-                  (paciente_id, psycopg2.Binary(image_bytes), time.strftime("%Y-%m-%d")))
-        conn.commit()
-        conn.close()
+    img_bytes = request.files['imagem']
+    
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("INSERT INTO imagens (paciente_id, imagem, data) VALUES (%s, %s, %s)",
+                (paciente_id, psycopg2.Binary(img_bytes), time.strftime("%Y-%m-%d")))
+    conn.commit()
+
+    conn.close()
 
     return redirect(url_for('dashboard', paciente_id=paciente_id))
 
+#Roda o arquivo para desenhar e a espera é em uma pagina aguarde 
 @app.route('/desenhar_mao/<int:paciente_id>')
 def desenhar_mao_threaded(paciente_id):
-    def executar_desenho():
+    '''def executar_desenho():
         os.system(f"python desenhar_mao.py {paciente_id}")
-    threading.Thread(target=executar_desenho).start()
-    return render_template('aguarde.html', paciente_id=paciente_id)
+    threading.Thread(target=executar_desenho).start()'''
+    return redirect(url_for('aguarde', paciente_id=paciente_id))
 
 if __name__ == '__main__':
     app.run(debug=True)

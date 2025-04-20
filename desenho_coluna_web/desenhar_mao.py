@@ -11,6 +11,7 @@ from psycopg2.extras import RealDictCursor
 
 # Conexão com PostgreSQL (Render)
 DATABASE_URL = "postgresql://pacientes_web_user:uKk2h90mdG3FVesUsIBf2AuZqCbmfwnZ@dpg-cvu4v9h5pdvs73e4qec0-a.oregon-postgres.render.com/pacientes_web"
+
 # Define a função get_db_connection() que conecta ao banco de dados remoto na Render.
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
@@ -22,12 +23,15 @@ paciente_id = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
 # Inicializar detector
 detector = HandDetector(detectionCon=0.7, maxHands=1) # Inicializa o detector de mão com 70% de confiança e detectando no máximo 1 mão.
+
 # Captura de vídeo
 cap = cv2.VideoCapture(0)
 frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) 
+
 # Tela preta para desenhar
 canvas = np.zeros((frame_height, frame_width, 3), dtype=np.uint8)
+
 
 # Variáveis de controle
 prev_x, prev_y = None, None
@@ -53,10 +57,10 @@ while cap.isOpened():
 
     frame = cv2.flip(frame, 1)
 
-    # Aumentar contraste
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # Aumentar contraste da imagem para facilitar a detecção
+    '''gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     enhanced = cv2.equalizeHist(gray)
-    frame = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+    frame = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)'''
 
     # Detectar mão
     hands, frame = detector.findHands(frame, flipType=False, draw=True)
@@ -83,12 +87,11 @@ while cap.isOpened():
     if capture_started:
         elapsed_time = time.time() - start_time
         if elapsed_time >= capture_duration:
-            frame_final = frame.copy()
             break
 
         if hands:
             lmList = hands[0]['lmList']
-            x, y = lmList[4][0], lmList[4][1]  # THUMB_TIP
+            x, y = lmList[4][0], lmList[4][1]  # Ponto 4 = dedão (THUMB_TIP)
 
             if initial_x is None:
                 initial_x = x
@@ -98,9 +101,12 @@ while cap.isOpened():
                 dy = abs(y - prev_y)
                 if dx > 3 or dy > 3:
                     cv2.line(canvas, (prev_x, prev_y), (x, y), (255, 255, 255), 3)
-            prev_x, prev_y = x, y
+                    prev_x, prev_y = x, y
+            else:
+                prev_x, prev_y = x, y
 
-            # Referência para px -> cm
+# --- Conversão de pixels para cm ---
+            # Base do dedão e base do mindinho
             x1, y1 = lmList[0][0], lmList[0][1]
             x2, y2 = lmList[17][0], lmList[17][1]
             ref_distance_px = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
@@ -136,16 +142,16 @@ if frame_final is None:
 final_image = cv2.addWeighted(frame_final, 0.5, canvas, 0.5, 0)
 
 # Salva imagem no disco
-os.makedirs("static/imagens", exist_ok=True)
+'''os.makedirs("static/imagens", exist_ok=True)
 timestamp = time.strftime("%Y%m%d-%H%M%S")
 filename = f"{paciente_id}_{timestamp}.png"
-output_path = os.path.join("static/imagens", filename)
+output_path = os.path.join("static/imagens", filename)'''
 
 # Codifica a imagem como PNG em memória
 _, img_encoded = cv2.imencode('.png', final_image)
 img_bytes = img_encoded.tobytes()
 
-# Salva no banco de dados como binário
+'''# Salva no banco de dados como binário
 try:
     conn = get_db_connection()
     c = conn.cursor()
@@ -155,5 +161,5 @@ try:
     conn.close()
     print("Imagem binária registrada no banco com sucesso!")
 except Exception as e:
-    print(f"Erro ao salvar imagem binária no banco: {e}")
+    print(f"Erro ao salvar imagem binária no banco: {e}")'''
 

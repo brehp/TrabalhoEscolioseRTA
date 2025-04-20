@@ -27,13 +27,6 @@
     <div class="container">
         <h1 class="mb-4">Dashboard de Pacientes</h1>
 
-        {% if ultima_imagem %}
-        <div class="mb-5">
-            <h3>🆕 Imagem recém-criada</h3>
-            <img src="data:image/png;base64,{{ ultima_imagem }}" class="img-fluid highlighted-img" alt="Imagem recente">
-        </div>
-        {% endif %}
-
         <h3>📂 Histórico de Imagens do Paciente</h3>
         <div class="row">
             {% if imagens %}
