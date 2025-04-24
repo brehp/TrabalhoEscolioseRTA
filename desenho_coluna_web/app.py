@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, session, url_for
+from flask import Flask, render_template, request, redirect, session, url_for, flash,  get_flashed_messages
 from psycopg2 import connect, sql
 import psycopg2.extras
 import base64
@@ -22,13 +22,15 @@ def get_db_connection():
 # Página de login - Redireciona inicio para ser login.html
 @app.route('/')
 def index():
-    return render_template('login.html')
+    mensagens = get_flashed_messages()
+    erro = mensagens[0] if mensagens else None
+    return render_template('login.html', erro=erro)
 
 # Rota para realizar o login e ser redirecionado ao dashboard 
 @app.route('/login', methods=['POST'])
 def login():
     cpf = request.form['cpf']
-    senha = request.form['senha']   
+    senha = request.form['senha']  
 
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
@@ -37,14 +39,17 @@ def login():
     user = cursor.fetchone()
 
     conn.close()
- 
+
     if user:
         session['nome'] = user['nome']
         session['paciente_id'] = user['id']  # Armazena para a próxima rota
         return redirect(url_for('dashboard'))
-   
     else:
-        return "CPF ou senha inválidos"
+        flash("CPF ou senha incorretos.")
+        return redirect(url_for('index'))  # Redireciona para GET
+
+    
+   
 
 # Redireciona de login para a pagina cadastro
 @app.route('/redireciona_Login_Cadastro')
