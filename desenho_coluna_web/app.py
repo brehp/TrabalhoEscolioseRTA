@@ -8,10 +8,8 @@ import numpy as np
 import time
 from cvzone.HandTrackingModule import HandDetector
 
-
 app = Flask(__name__)
 app.secret_key = 'chave_super_secreta'  # Necessário para usar sessão
-
 
 # Configuração do banco de dados
 DATABASE_URL = "postgresql://pacientes_web_user:uKk2h90mdG3FVesUsIBf2AuZqCbmfwnZ@dpg-cvu4v9h5pdvs73e4qec0-a.oregon-postgres.render.com/pacientes_web"
@@ -21,15 +19,7 @@ def get_db_connection():
     conn = connect(DATABASE_URL, sslmode='require')
     return conn
 
-
-
-
-#Pagina de Login###################################################################
-
-
-
-
-# Redireciona inicio para ser login.html
+# Página de login - Redireciona inicio para ser login.html
 @app.route('/')
 def index():
     return render_template('login.html')
@@ -97,15 +87,7 @@ def cadastro():
 
     return redirect(url_for('index'))  # Redireciona para a página de login após cadastro
 
-
-
-
-#Pagina de Dashboard###################################################################
-
-
-
-
-# Codigo do dashboard onde mostra as imagens do paciente 
+# Página de dashboard onde mostra as imagens do paciente 
 @app.route('/dashboard')
 def dashboard():
     nome = session.get('nome')
@@ -118,22 +100,23 @@ def dashboard():
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
     # Busca todas as imagens relacionadas ao paciente
-    cursor.execute("SELECT imagem FROM imagens WHERE paciente_id = %s", (paciente_id,))
+    cursor.execute("SELECT imagem, desenho FROM imagens WHERE paciente_id = %s", (paciente_id,))
     imagens_raw = cursor.fetchall()
     conn.close()
 
     # Converte as imagens bytea para base64
-    imagens_base64 = [
-        base64.b64encode(img['imagem']).decode('utf-8') for img in imagens_raw
-    ]
+    imagens = []
+    for row in imagens_raw:
+        imagens.append({
+            'real': base64.b64encode(row['imagem']).decode('utf-8'),
+            'desenho': base64.b64encode(row['desenho']).decode('utf-8')
+        })
 
-    return render_template('dashboard.html', nome=nome, imagens=imagens_base64)
-
-
-
-
-
-# Codigo novo
+    return render_template(
+        'dashboard.html',
+        nome=nome,
+        imagens=imagens
+    )
 
 @app.route('/capturar', methods=['POST'])
 def capturar():
@@ -142,16 +125,16 @@ def capturar():
     if not paciente_id:
         return redirect(url_for('login'))
 
-    imagem_bytes = imagem_coluna()  # captura com OpenCV
+    imagem_bytes, desenho_bytes = imagem_coluna()  # captura com OpenCV
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
     # Inserção no banco com imagem BYTEA
     cursor.execute("""
-        INSERT INTO imagens (paciente_id, data, imagem)
-        VALUES (%s, %s, %s)
-    """, (paciente_id, datetime.now(), psycopg2.Binary(imagem_bytes)))
+        INSERT INTO imagens (paciente_id, data, imagem, desenho)
+        VALUES (%s, %s, %s, %s)
+    """, (paciente_id, datetime.now(), psycopg2.Binary(imagem_bytes), psycopg2.Binary(desenho_bytes)))
     
     conn.commit()
     conn.close()
@@ -172,7 +155,6 @@ def imagem_coluna():
     cv2.namedWindow("Desenho com os dedos", cv2.WINDOW_NORMAL)
     cv2.moveWindow("Desenho com os dedos", 100, 100)  # Posição na tela
     cv2.setWindowProperty("Desenho com os dedos", cv2.WND_PROP_TOPMOST, 1)  # Fica em primeiro plano
-
 
     # Tela preta para desenhar
     canvas = np.zeros((frame_height, frame_width, 3), dtype=np.uint8)
@@ -285,7 +267,11 @@ def imagem_coluna():
     _, buffer = cv2.imencode('.png', final_image)
     imagem_bytes = buffer.tobytes()
 
-    return imagem_bytes
+    desenho = smooth_canvas if smooth_canvas is not None else canvas
+    _, buf_des = cv2.imencode('.png', desenho)
+    desenho_bytes = buf_des.tobytes()
+
+    return imagem_bytes, desenho_bytes
 
 
 if __name__ == '__main__':
